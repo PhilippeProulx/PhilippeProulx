@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>WebRTC exploration</title>
+  <meta charset="utf-8">
+  <style>
+    button {
+      min-width: 80px;
+      min-height: 24px;
+      text-transform: capitalize;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    button, input, textarea {
+      margin-top: 2px;
+      margin-right: 4px;
+      margin-bottom: 2px;
+      box-sizing: border-box;
+    }
+
+    input {
+      min-height: 24px;
+      padding-left: 4px;
+      padding-right: 4px;
+    }
+
+    input, textarea {
+      min-width: 320px;
+      background-color: whitesmoke;
+      border-width: 1px;
+    }
+
+    textarea {
+      min-height: 128px;
+    }
+
+    textarea:read-only {
+      color: gray;
+      font-style: italic;
+    }
+
+    .roleSelected {
+      color: darkgreen;
+      font-style: italic;
+      font-weight: bold;
+    }
+
+    .connectionStatus {
+      font-style: italic;
+      font-weight: bold;
+    }
+
+    .connectionStatusNotConnected {
+      color: darkred;
+    }
+
+    .connectionStatusConnected {
+      color: darkgreen;
+    }
+
+  </style>
+</head>
+<body>
+<h1>WebRTC demo</h1>
+
+<p><b>WebRTC</b> (Web Real-Time Communication) is a technology which enables Web applications and sites to capture and
+  optionally stream audio and/or video media, as well as to exchange arbitrary data between browsers without requiring
+  an intermediary. The set of standards that comprise WebRTC makes it possible to share data and perform
+  teleconferencing peer-to-peer, without requiring that the user install plug-ins or any other third-party
+  software.<br/>
+  <i><small>source: <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API">Mozilla - WebRTC
+    API</a></small></i></p>
+
+<p>This demo shows that two clients can connect together using WebRTC without any custom server by exchanging handshake
+  data (offer and answer).<br/>
+  <i><small>source: <a href="https://stackoverflow.com/a/54985729">Stack Overflow -
+    webrtc-datachannel-with-manual-signaling-example-please</a></small></i></p>
+
+<ul>
+  <li><b>Host</b>: the person who initiate the connection</li>
+  <li><b>Guest</b>: the person who join the host to establish a connection</li>
+  <li><b>Role</b>: either <em>host</em> or <em>guest</em></li>
+  <li><b>Offer</b>: session description identifying the <em>host</em></li>
+  <li><b>Answer</b>: session description identifying the <em>guest</em></li>
+</ul>
+
+<ol>
+  <li value="1">
+    Chose your <em>role</em>
+    <br/>
+    <button id="selectGuestButton" onClick="selectRoleGuest()">Select Guest</button>
+    <button id="selectHostButton" onClick="selectRoleHost()">Host ✔</button>
+  </li>
+
+  <!-- Host -->
+  <li class="stepHost" value="2">
+    Create an <em>offer</em>
+    <br/>
+    <button id="CreateOfferButton" onclick="createOffer()">Create offer</button>
+  </li>
+
+  <li class="stepHost">
+    Copy the <em>offer</em> to the <em>guest</em>
+    <br/>
+    <label>
+      <textarea id="hostOfferText" readonly placeholder="(host offer)"></textarea>
+    </label>
+  </li>
+
+  <li class="stepHost">
+    Paste the <em>answer</em> from the <em>guest</em>
+    <br/>
+    <label>
+      <textarea id="guestAnswerInput" placeholder="(guest answer)"></textarea>
+    </label>
+  </li>
+
+  <li class="stepHost">
+    Connect to the guest <em>guest</em>
+    <br/>
+    <label>
+      <button id="connectToGuestButton" onclick="connectToGuest()">Connect</button>
+    </label>
+  </li>
+
+  <!-- Guest -->
+  <li class="stepGuest" value="2">
+    Paste the <em>offer</em> from the <em>host</em>
+    <br/>
+    <label>
+      <textarea id="hostOfferInput" placeholder="(host offer)"></textarea>
+    </label>
+  </li>
+
+  <li class="stepGuest">
+    Create an <em>answer</em>
+    <br/>
+    <button id="createAnswerButton" onclick="createAnswer()">Create answer</button>
+  </li>
+
+  <li class="stepGuest">
+    Copy the <em>answer</em> to the <em>host</em>
+    <br/>
+    <label>
+      <textarea id="guestAnswerText" readonly placeholder="(guest answer)"></textarea>
+    </label>
+  </li>
+</ol>
+
+<ul>
+  <li>
+    <div id="connectionStatusNotConnected">Status: <span class="connectionStatus connectionStatusNotConnected">not connected ✘</span>
+    </div>
+    <div id="connectionStatusConnected">Status: <span
+        class="connectionStatus connectionStatusConnected">connected ✔</span></div>
+    <br/>
+    Write messages and press <em>enter</em>
+    <br/>
+    <label>
+      <input id="messageInput"/>
+    </label>
+    <br/>
+    <label>
+      <textarea id="messageList" readonly placeholder="(message list)"></textarea>
+    </label>
+  </li>
+</ul>
+
+
+<!--✘-->
+
+<script>
+  const roleHostName = "host";
+  const roleGuestName = "guest";
+
+  const connectionStatusConnectedId = "connectionStatusConnected";
+  const connectionStatusNotConnectedId = "connectionStatusNotConnected";
+
+  let roleSelected = roleHostName;
+  let connectionStatus;
+
+  const configuration = {iceServers: [{urls: "stun:stun.1.google.com:19302"}]};
+  const peerConnection = new RTCPeerConnection(configuration);
+  const dataChannel = peerConnection.createDataChannel("chat", {negotiated: true, id: 0});
+
+  const messageInputElement = document.getElementById("messageInput");
+  const messageListElement = document.getElementById("messageList");
+  const createOfferButtonElement = document.getElementById("CreateOfferButton");
+  const createAnswerButtonElement = document.getElementById("createAnswerButton");
+  const hostOfferInputElement = document.getElementById("hostOfferInput");
+  const hostOfferTextElement = document.getElementById("hostOfferText");
+  const guestAnswerInputElement = document.getElementById("guestAnswerInput");
+  const guestAnswerTextElement = document.getElementById("guestAnswerText");
+  const selectHostButtonElement = document.getElementById("selectHostButton");
+  const selectGuestButtonElement = document.getElementById("selectGuestButton");
+  const connectToGuestButtonElement = document.getElementById("connectToGuestButton");
+
+  const addMessage = (message) => messageListElement.innerHTML += `${message}\n`;
+
+  dataChannel.onopen = () => {
+    if (roleSelected === roleGuestName) {
+      guestAnswerTextElement.disabled = true;
+      selectHostButtonElement.disabled = true;
+    }
+
+    messageInputElement.select();
+    setConnectionStatusConnected();
+  }
+  dataChannel.onmessage = (event) => addMessage(`${event.data}`);
+  peerConnection.oniceconnectionstatechange = () => addMessage(peerConnection.iceConnectionState);
+
+  const selectRole = (roleName) => {
+    roleSelected = roleName;
+    const isHost = roleSelected === roleHostName;
+    const isGuest = !isHost;
+
+    selectHostButtonElement.disabled = isHost;
+    selectGuestButtonElement.disabled = isGuest;
+
+    selectHostButtonElement.innerText =
+      (isGuest ? "Select " : "") +
+      roleHostName +
+      (isHost ? " ✔" : "");
+
+    selectGuestButtonElement.innerText =
+      (isHost ? "Select " : "") +
+      roleGuestName +
+      (isGuest ? " ✔" : "");
+
+    const stepsHost = [...document.getElementsByClassName(`stepHost`)];
+    const stepsGuest = [...document.getElementsByClassName(`stepGuest`)];
+
+    stepsHost.forEach(element => element.style.display = isHost ? "list-item" : "none");
+    stepsGuest.forEach(element => element.style.display = isGuest ? "list-item" : "none");
+
+    if (isHost) {
+      selectHostButtonElement.classList.add("roleSelected");
+      selectGuestButtonElement.classList.remove("roleSelected");
+      createOfferButtonElement.focus();
+    } else {
+      selectHostButtonElement.classList.remove("roleSelected");
+      selectGuestButtonElement.classList.add("roleSelected");
+      hostOfferInputElement.select();
+    }
+  }
+
+  const selectRoleHost = () => selectRole(roleHostName);
+  const selectRoleGuest = () => selectRole(roleGuestName);
+
+  messageInputElement.onkeypress = function (e) {
+    if (e.keyCode !== 13) {
+      return;
+    }
+    const message = `${roleSelected}: ${messageInputElement.value}`;
+    dataChannel.send(message);
+    addMessage(message);
+    messageInputElement.value = "";
+  };
+
+  const createOffer = async () => {
+    createOfferButtonElement.disabled = true;
+    createOfferButtonElement.innerText = "Create Offer ✔";
+
+    await peerConnection.setLocalDescription(await peerConnection.createOffer());
+    peerConnection.onicecandidate = ({candidate}) => {
+      if (candidate) {
+        return;
+      }
+      hostOfferTextElement.value = peerConnection.localDescription.sdp;
+      hostOfferTextElement.select();
+      // answer.placeholder = "Paste answer here";
+    };
+  };
+
+  const createAnswer = async () => {
+    if (peerConnection.signalingState !== "stable") {
+      return;
+    }
+    hostOfferInputElement.disabled = true;
+    createAnswerButtonElement.disabled = true;
+    createAnswerButtonElement.innerText = "Create Answer ✔";
+
+    await peerConnection.setRemoteDescription({type: "offer", sdp: hostOfferInputElement.value});
+    await peerConnection.setLocalDescription(await peerConnection.createAnswer());
+    peerConnection.onicecandidate = ({candidate}) => {
+      if (candidate) {
+        return;
+      }
+      guestAnswerTextElement.focus();
+      guestAnswerTextElement.value = peerConnection.localDescription.sdp;
+      guestAnswerTextElement.select();
+    };
+  };
+
+  const connectToGuest = () => {
+    if (peerConnection.signalingState !== "have-local-offer") {
+      return;
+    }
+    guestAnswerInputElement.readonly = true;
+    connectToGuestButtonElement.disabled = true;
+    selectGuestButtonElement.disabled = true;
+
+    peerConnection.setRemoteDescription({type: "answer", sdp: guestAnswerInputElement.value});
+  };
+
+  const setConnectionStatus = (status) => {
+    connectionStatus = status;
+    const connectionStatusNotConnectedElement = document.getElementById(connectionStatusNotConnectedId);
+    const connectionStatusConnectedElement = document.getElementById(connectionStatusConnectedId);
+
+    connectionStatusNotConnectedElement.style.display = connectionStatus === connectionStatusNotConnectedId ? "block" : "none";
+    connectionStatusConnectedElement.style.display = connectionStatus === connectionStatusConnectedId ? "block" : "none";
+  }
+
+  const setConnectionStatusNotConnected = () => setConnectionStatus(connectionStatusNotConnectedId);
+  const setConnectionStatusConnected = () => setConnectionStatus(connectionStatusConnectedId);
+
+  selectRoleGuest();
+  setConnectionStatusNotConnected();
+
+</script>
+
+</body>
+</html>
